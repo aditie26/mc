@@ -1,566 +1,337 @@
-1st
-Simple program for memory transfer 
-#include <reg51.h>
-void main(void)
-{
-    unsigned char x,y,z;
-    x = 0x0A;
-    y = 0x05;
-    P1 = 0x00;
-    z = x + y;
-    P1 = z;
-}
+DC5
+ 
+M = 256;
+x = (0:M-1);
+y = qammod(x, M);
+scatterplot(y)
 
-#include <reg51.h>
-void main(void)
-{
-    unsigned char x,y,z;
-    x = 0x08;
-    y = 0x04;
-    P1 = 0x00;
-    z = x - y;
-    P1 = z;
-}
+DC5.2
 
-#include <reg51.h>
-void main(void)
-{
-    unsigned char x,y,z;
-    x = 0x10;
-    y = 0x02;
-    P1 = 0x00;
-    z = x * y;
-    P1 = z;
-}
+M = 16;
+x = (0:M-1) ;
+y = qammod(x,M);
+scatterplot(y)
 
-#include <reg51.h>
-void main(void)
-{
-    unsigned char x,y,z;
-    x = 0x10;
-    y = 0x02;
-    P1 = 0x00;
-    z = x / y;
-    P1 = z;
-}
+DC5.3
+M=4;
+data = randi([0 M-1],1000,1);
+txSig = pskmod(data,M,pi/M);
+rxSig = awgn(txSig,20);
+scatterplot(rxSig)
 
-#include <reg51.h>
-void main(void)
-{
-    unsigned char mynum[] = "012345ABCD";
-    unsigned char z;
-    for (z = 0; z <= 9; z++)
-        P1 = mynum[z];
-}
+DC5.4
+M1=16;
+data = randi([0 M1-1],1000,1);
+txSig1 = pskmod(data,M1,pi/M1);
+rxSig1 = awgn(txSig1,20);
+scatterplot(rxSig1)
 
-2nd
-Blinking led alternate 
-#include <reg51.h>
+DC 6
+clc;
+clear;
+close all;
+Eb=5*10^-8;
+No=2*10^-9;
+N = 100;
+M = 4;
+Pe=0.5*erfc(sqrt(Eb/No))
+pe=erfc(sqrt(N*Eb/No)*(sin(3.14/M)^2))
+pe = 2*erfc(sqrt(0.4*Eb/No))
+pe=(M^-1/2)*erfc(sqrt(N*Eb/2*No))
 
-void delay(void);        // prototype
+DC 7
+%% PRACTICAL 7:
+clc;
+clear;
+close all;
 
-void main(void)
-{
-    while(1)             // INFINITE LOOP
-    {
-        P1 = 0x0F;       // lower nibble ON, upper nibble OFF
-        delay();
-        P1 = 0xF0;       // upper nibble ON, lower nibble OFF
-        delay();
-    }
-}
+%% Parameters
+no_of_data_bits = 64;         % Number of bits
+M = 4;                        % QPSK modulation (M=4)
+k = log2(M);                  % Bits per symbol
+block_size = 16;              % IFFT size
+cp_len = floor(0.1 * block_size); % Cyclic prefix length
+n_subcarriers = 4;            % Number of subcarriers
+ifft_len = block_size;
 
-void delay(void)
-{
-    TMOD = 0x01;        // Timer0 in mode 1 (16-bit); Timer1 cleared
-    TH0 = 0xFF;         // high byte initial value
-    TL0 = 0x0A;         // low byte initial value
-    TR0 = 1;            // start Timer0
-    while (TF0 == 0);   // wait until Timer0 overflow sets TF0
-    TR0 = 0;            // stop Timer0
-    TF0 = 0;            // clear overflow flag for next use
-}
+%% Transmitter
 
-Toggling 
-#include <reg51.h>
+% Generate random data
+data = randi([0 M-1], 1, no_of_data_bits);
+figure, stem(data); grid on;
+xlabel('Index'); ylabel('Amplitude'); title('Original Data');
 
-void delay(void);
+% QPSK Modulation
+mod_data = pskmod(data, M);
+figure, stem(real(mod_data)); grid on;
+xlabel('Index'); ylabel('Amplitude'); title('QPSK Modulated Data');
 
-void main(void)
-{
-    while(1)
-    {
-        P1 = 0xAA;       // pattern 10101010
-        delay();
-        P1 = 0x00;       // all OFF
-        delay();
-    }
-}
+% Serial to Parallel: Group into 4 subcarriers
+symbols_per_carrier = no_of_data_bits / n_subcarriers;
+S2P_data = reshape(mod_data, symbols_per_carrier, n_subcarriers);
 
-void delay(void)
-{
-    TMOD = 0x01;
-    TH0 = 0xFF;
-    TL0 = 0x0A;
-    TR0 = 1;
-    while (TF0 == 0);
-    TR0 = 0;
-    TF0 = 0;
-}
+% IFFT for each OFDM symbol
+ifft_data = ifft(S2P_data, ifft_len);
 
-7 segment 
-#include <reg51.h>
+% Add cyclic prefix
+cp = ifft_data(end - cp_len + 1:end, :);
+ofdm_with_cp = [cp; ifft_data];
 
-void delay(void);
+% Serialize for transmission
+ofdm_tx = reshape(ofdm_with_cp, 1, []);
 
-void main(void)
-{
-    unsigned char code digits[] = {0x3F, 0x06, 0x5B, 0x4F, 
-                                   0x66, 0x6D, 0x7D, 0x07, 
-                                   0x7F, 0x6F}; // 0–9 pattern
+figure, plot(real(ofdm_tx)); grid on;
+title('Transmitted OFDM Signal');
+xlabel('Time'); ylabel('Amplitude');
 
-    int i;
+%% Channel
 
-    while(1)
-    {
-        for(i = 0; i < 10; i++)
-        {
-            P0 = digits[i];  // send pattern for each number
-            delay();
-        }
-    }
-}
+% Simple multipath fading channel (2-tap)
+channel = (randn(1,2) + 1i*randn(1,2)) / sqrt(2);
+rx_channel = filter(channel, 1, ofdm_tx);
 
-void delay(void)
-{
-    unsigned int j;
-    for(j = 0; j < 50000; j++);
-}
-1.2
-#include <reg51.h>
+% Add AWGN
+SNR_dB = 20;  % Example SNR in dB
+rx_signal = awgn(rx_channel, SNR_dB, 'measured');
 
-void delay(){
-    int i;
-    for(i=0; i<=12; i++){
-        TMOD = 0x01;
-        TL0 = 0x00;
-        TH0 = 0x00;
-        TR0 = 1;
-        while(TF0 == 0);
-        TR0 = 0;
-        TF0 = 0;
-    }    
-}
+figure, plot(real(rx_signal)); grid on;
+title('Received Signal After Channel and Noise');
 
-unsigned char codes[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f}
+%% Receiver
 
-void main(){
-    int k;
-    while(1){
-        for(k=0; k<11; k++){
-            P2 = codes[k];
-            delay();
-        }
-    }
-}
-stepper
-#include<reg51.h>
-void delay();
-void main()
-{
-unsigned char dat;
-while(1)
-{
-dat=0x01;
-P2=dat;
-delay();
-dat=0x02;
-P2=dat;
-delay();
-dat=0x04;
-P2=dat;
-delay();
-dat=0x08;
-P2=dat;
-delay();
-}
-}
-void delay()
-{
-TMOD=0X10;
-TH1=0X00;
-TL1=0X00;
-TR1=1;
-while(TF1==0);
-TR1=0;
-TF1=0;
-}
+% Parallel conversion
+ofdm_rx_matrix = reshape(rx_signal, ifft_len + cp_len, n_subcarriers);
 
-lcd interfacing 
-#include<reg51.h>
-#define lcd_data P1
-sbit rs=P2^2;
-sbit rw=P2^1;
-sbit en=P2^0;
-void  lcd_init();
-void cmd(unsigned char a);
-void dat(unsigned char b);
-void show(unsigned char *s);
-void lcd_delay();
-void lcd_init()
-{
-cmd(0x38);
-cmd(0x0e);
-cmd(0x01);
-cmd(0x06);
-cmd(0x0c);
-cmd(0x80);
-}
-void cmd(unsigned char a)
-{
-lcd_data=a;
-rs=0;
-rw=0;
-en=1;
-lcd_delay();
-en=0;
-}
-void dat(unsigned char b)
-{
-lcd_data=b;
-rs=1;
-rw=0;
-en=1;
-lcd_delay();
-en=0;}
-void show(unsigned char *s){
-while(*s){
-dat(*s++); 
-}
-}
-void lcd_delay()
-{
-unsigned int lcd_delay;
-for(lcd_delay=0;lcd_delay<=6000;lcd_delay++);
-}
-int main()
-{
-unsigned int j;
-lcd_init();
-while(1)
-{
-cmd(0x80);
-show("VISHAL");
-cmd(0xc0);
-show("RAJPUROHIT");
+% Remove cyclic prefix
+ofdm_rx_no_cp = ofdm_rx_matrix(cp_len+1:end, :);
 
-for(j=0;j<30000;j++);
-cmd(0x01);
-for(j=0;j<30000;j++);
-}
-}
+% FFT to return to frequency domain
+rx_fft = fft(ofdm_rx_no_cp, ifft_len);
 
-lcd interfacing pic
-#include <P18f4550.h>
+% Channel Frequency Response (for equalization)
+H = fft(channel, ifft_len);
+H_matrix = repmat(H.', 1, n_subcarriers);  % Match dimensions
 
-#define LCD_EN LATAbits.LA1
-#define LCD_RS LATAbits.LA0
-#define LCDPORT PORTB
+% Equalize (Zero Forcing)
+rx_equalized = rx_fft ./ H_matrix;
 
-void lcd_delay(unsigned int timer) {
-    unsigned int i, j;
-    for (i = 0; i < timer; i++) {
-        for (j = 0; j < 100; j++) {
-            // Do nothing, just delay
-        }
-    }
-}
+% Parallel to Serial
+rx_serial = reshape(rx_equalized, 1, []);
 
-void SendInstruction(unsigned char command) {
-    LCD_RS = 0; 
-    LCDPORT = command;
-    LCD_EN = 1;
-    lcd_delay(10);
-    LCD_EN = 0;
-    lcd_delay(10);
-}
+% QPSK Demodulation
+rx_demod = pskdemod(rx_serial, M);
 
-void SendData(unsigned char leddata) {
-    LCD_RS = 1; // RS HIGH for DATA
-    LCDPORT = leddata;
-    LCD_EN = 1; // EN High
-    lcd_delay(10);
-    LCD_EN = 0; // EN Low; data sampled at EN falling edge
-    lcd_delay(10);
-}
+%% Plot Original vs Received
+figure;
+stem(data, 'b'); hold on;
+stem(rx_demod, 'r'); grid on;
+xlabel('Symbol Index'); ylabel('Symbol Value');
+legend('Original', 'Received');
+title('Transmitted vs Received Symbols');
 
-void InitLCD(void) {
-    ADCON1 = 0x0F; // Set digital I/O
-    TRISB = 0x00; // Set data port as output
-    TRISAbits.RA0 = 0; // RS pin
-    TRISAbits.RA1 = 0; // EN pin
+%% BER Calculation
+num_errors = sum(data ~= rx_demod);
+BER = num_errors / no_of_data_bits;
+fprintf('Bit Error Rate (BER): %.4f\n', BER);
 
-    // 8 bit mode, 2 line, 5x7 dots
-    SendInstruction(0x38);
-    SendInstruction(0x06); // Entry mode
-    SendInstruction(0x0C); // Display ON, cursor OFF
-    SendInstruction(0x01); // Clear display
-    SendInstruction(0x80); // Set address to 1st line
-}
+DC 8
+clc;
+clear all;
+close all;
 
-unsigned char *String1 = "Aradhana Shukla"; // Initialize with a valid string
-unsigned char *String2 = "Anushka Bankar"; // PIC-18F Board
+i = input('Enter no. of elements: ');
+q = input('Enter joint probabilities matrix: ');
 
-void main(void) {
-    InitLCD(); // Initialize the LCD
+% Probability P(X)
+w = 0;
+for n = 1:i
+    for m = 1:i
+        w = w + q(n, m);
+    end
+    p(n) = w;
+    w = 0;
+end
 
-    while (*String1) {
-        SendData(*String1);
-        String1++;
-    }
+disp('P(X): ');
+disp(p);
 
-    // Set address to 2nd line
-    SendInstruction(0xC0);
+% Entropy H(X)
+k = 0;
+for n = 1:i
+    H1 = k + (p(n) * log2(1 / p(n)));
+    k = H1;
+end
+disp('H(X): ');
+disp(H1);
 
-    while (*String2) {
-        SendData(*String2);
-        String2++;
-    }
+% Conditional probability matrix
+for n = 1:i
+    for m = 1:i
+        a(n, m) = q(n, m) / p(n);
+    end
+end
 
-    while (1) {
-        // Infinite loop
-    }
-}
+disp('P(Y/X): ');
+disp(a);
 
-relay,buzzer pic
-#include<p18F4550.h>
-void delay(){
-    unsigned int i;
-    for(i=0;i<30000;i++);
-}
-void main(){
-    unsigned char i,key=0;
-    TRISB=0x00;
-    //LATB=0x00;
-    ADCON1=0x0F;
-    TRISAbits.TRISA2=1;
-    TRISAbits.TRISA3=1;
-    TRISAbits.TRISA5=0;
-    TRISAbits.TRISA4=0;
-    while(1){
-        //LATAbits.LA2=1;
-        //LATAbits.LA3=1;
-        if(PORTAbits.RA2==0) key=0;
-        if(PORTAbits.RA3==0) key=1;
-        if(key==0){
-            PORTAbits.RA4==0;
-            PORTAbits.RA5==1;
-            for(i=0;i<8;i++)
-            {
-                PORTB=1<<i;
-                delay();
-                PORTB =0X00;
-                delay();
-            }
-        }
-        if(key==1){
-            PORTAbits.RA4=0;
-            PORTAbits.RA5=1;
-            for(i=7;i>0;i--){
-                PORTB=1<<i;
-                delay();
-                PORTB=0x00;
-                delay();
+% Entropy H(Y/X)
+d = 0;
+for n = 1:i
+    for m = 1:i
+        if (a(n, m) ~= 0)
+            H1 = d + (q(n, m) * log2(1 / a(n, m)));
+            d = H1;
+        end
+    end
+end
 
-            }
-        }
-    }
-}
+disp('H(Y/X): ');
+disp(H1);
 
+% Probability P(Y)
+w = 0;
+for n = 1:i
+    for m = 1:i
+        w = w + q(m, n);
+    end
+    s(n) = w;
+    w = 0;
+end
 
+disp('P(Y): ');
+disp(s);
 
+% Entropy H(Y)
+k = 0;
+for n = 1:i
+    H2 = k + (s(n) * log2(1 / s(n)));
+    k = H2;
+end
 
-led pic
-#include<p18f4550.h>
-void delay(unsigned int time)
-{
-    unsigned int i,j;
-    for(i=0;i<time;i++)
-        for(j=0;j<5000;j++);
-}
-void main(void)
-{
-    TRISB=0x00;
-    while(1)
-    {
-        PORTB=0x00;
-        delay(100);
-        PORTB=0xFF;
-        delay(100);
-    }
-}
+disp('H(Y): ');
+disp(H2);
 
-square wave
-#include <reg51.h>
+% Mutual Information (MI)
+m = H2 - H1;
+disp('MI = ');
+disp(m);
+IN THE OUTPUT:
+(ENTER NO.OF ELEMENTS=3
+ENTER MATRIX=[0.27 0.03 0;0 0.2 0.05;0 0.135 0.315] )
 
-sbit wave = P2^1;
+DC 9
+%% DC EXPERIMENT NO. 9
 
-void timer0(void) interrupt 1
-{
-    wave = ~wave;
-}
+clc; clear; close all;
 
-void main()
-{
-    while(1)
-    {
-        TMOD = 0x01;
-        TH0 = 0xFF;
-        TL0 = 0xF9;
-        IE = 0x82;
-        TR0 = 1;
-    }
-}
+% Define symbols and their probabilities
+symbols = 1:5;                          % Symbols
+p = [0.4 0.15 0.15 0.15 0.15];          % Probabilities (must sum to 1)
 
-ADC-LCD
-#include <p18f4550.h>
-#include<stdio.h>
-#define LCD_EN LATAbits.LA1
-#define LCD_RS LATAbits.LA0
-#define LCDPORT LATB
-void lcd_delay(unsigned int time){
-unsigned int i , j ;
-for(i = 0; i < time; i++){
-    for(j=0;j<50;j++);
-}
-}
-void SendInstruction(unsigned char command)
-{
-    LCD_RS = 0; // RS low : Instruction
-    LCDPORT = command;
-    LCD_EN = 1; // EN High
-    lcd_delay(10);
-    LCD_EN = 0; // EN Low; command sampled at EN falling edge
-    lcd_delay(10);
-}
-void SendData(unsigned char lcddata){
-    LCD_RS = 1; // RS HIGH : DATA
-    LCDPORT = lcddata;
-    LCD_EN = 1; // EN High
-    lcd_delay(10);
-    LCD_EN = 0; // EN Low; data sampled at EN falling edge
-    lcd_delay(10);
-}
-void InitLCD(void)
-{
-    ADCON1 = 0x0F;
-    TRISB = 0x00; //set data port as output
-    TRISAbits.RA0 = 0; //RS pin
-    TRISAbits.RA1 = 0; // EN pin
-    SendInstruction(0x38); //8 bit mode, 2 line,5x7 dots
-    SendInstruction(0x06); // entry mode
-    SendInstruction(0x0C); //Display ON cursor OFF
-    SendInstruction(0x01); //Clear display
-    SendInstruction(0x80); //set address to 0
-}
-void ADCInit(void)
-{
-    TRISEbits.RE1 = 1; //ADC channel 6 input
-    TRISEbits.RE2 = 1; //ADC channel 7 input
-    ADCON1 = 0b00000111; //Ref voltages Vdd & Vss; AN0 - AN7 channelsAnalog
-    ADCON2 = 0b10101110; //Right justified; Acquisition time 12T; Conversionclock Fosc/64
-}
-unsigned short Read_ADC(unsigned char Ch)
-{
-    ADCON0 = 0b00000001 | (Ch<<2); //ADC on; Select channel;
-    GODONE = 1; //Start Conversion
-    while(GO_DONE == 1 ); //Wait till A/D conversion is complete
-    return ADRES; //Return ADC result
-}
-void DisplayResult(unsigned short ADCVal)
-{
-    unsigned char i,text[16];
-    unsigned short tempv;
-    tempv = ADCVal;
-    SendInstruction(0x80); //set to 1st line
-    for(i=0;i<10;i++) //Display the 10 bit ADC result on LCD
-    {
-    if(tempv & 0x200)
-    {
-    SendData('1');
-    }
-    else
-    {
-    SendData('0');
-    }
-    tempv = tempv<<1;
-    }
-    ADCVal = (5500/1024)*ADCVal; //Convert binary data to mV; 1 bit <=>(5500/1024)mV
-    sprintf(text,"ADC value=%4dmv",ADCVal); //Convert integer data to string
-    SendInstruction(0xC0); //set to 2nd line
-    for(i=0;i<16;i++) //Display string on LCD
-    {
-        SendData(text[i]);
-    }
-}
-void main()
-{
-    unsigned short Ch_result;
-    TRISB = 0x00; //PORTB connected to LCD is output
-    ADCInit();
-    InitLCD();
-    while(1)
-    {
-        Ch_result = Read_ADC(7);
-        DisplayResult(Ch_result);
-        lcd_delay(1000);
-    }
-}
+% Generate Huffman dictionary
+[dict, avglen] = huffmandict(symbols, p);
 
-PWM DC
-#include <p18f4550.h>
+% Calculate average information (Entropy H(X))
+H = sum(p .* log2(1 ./ p));
 
-void timer2Init(void)
-{
-    T2CON = 0b00000100; // Prescaler = 16; Timer2 ON (set the TMR2ON bit here)
-    PR2 = 0x95; // Period Register for 200us
-}
+% Calculate efficiency
+Efficiency = (H / avglen) * 100;
 
-void delay(unsigned int time)
-{
-    unsigned int i, j;
-    for (i = 0; i < time; i++)
-        for (j = 0; j < 1000; j++);
-}
+% Generate random signal of 100 symbols using given distribution
+sig = randsrc(1, 100, [symbols; p]);
 
-void main(void)
-{
-    unsigned int i;
-    TRISCbits.TRISC1 = 0; // RC1 pin as output
-    TRISCbits.TRISC2 = 0; // CCP1 pin as output
-    LATCbits.LATC1 = 0;
+% Encode and Decode
+hcode = huffmanenco(sig, dict);
+dcode = huffmandeco(hcode, dict);
 
-    CCP1CON = 0b00111100; // Select PWM mode; Duty cycle LSB
-    CCP1CONbits.CCP1M3 = 1; // Set bit 3
-    CCP1CONbits.CCP1M2 = 1; // Set bit 2
+% Measure code length
+code_length = length(hcode);
 
-    CCPR1L = 0x0F; // Duty cycle 10%
-    timer2Init(); // Initialize Timer2
+% --------------- Display Results ----------------
+disp('--- Huffman Coding Results ---');
+disp('Huffman Dictionary (Symbol -> Code):');
+disp(dict);
 
-    TMR2ON = 1; // Timer2 ON
+fprintf('Entropy (H): %.4f bits/symbol\n', H);
+fprintf('Average Code Length: %.4f bits/symbol\n', avglen);
+fprintf('Efficiency: %.2f %%\n', Efficiency);
+fprintf('Total Encoded Length: %d bits\n', code_length);
 
-    while (1) // Loop forever
-    {
-        for (i = 15; i < 150; i++)
-        {
-            CCPR1L = i; // Adjust duty cycle
-            delay(100); // Delay for visibility
-        }
-        for (i = 150; i > 15; i--)
-        {
-            CCPR1L = i; // Adjust duty cycle
-            delay(100); // Delay for visibility
-        }
-    }
-}
+% Check decoding correctness
+if isequal(sig, dcode)
+    disp('Decoding successful: Original signal and decoded signal match ✓');
+else
+    disp('Decoding error ✗');
+end
+
+DC 10
+clc;
+clear;
+
+% Given H Matrix (3x7 for (7,4) Hamming Code)
+H = [1 1 0 1 0 0 0;
+     1 0 1 0 1 0 0;
+     0 1 1 0 0 1 0];
+
+k = 4;
+n = 7;
+
+% Generating G Matrix
+P = H';      % Transpose of H → 7x3
+L = P;
+L(5:7, :) = [];  % Remove last 3 rows (now L is 4x3)
+I = eye(k);      % Identity matrix (4x4)
+G = [I L];       % Generator matrix (4x7)
+
+% Generate all 2^k data words
+no = 2^k;
+u = zeros(no, k);
+
+for i = 1:no
+    for j = k:-1:1
+        if rem(i - 1, 2^(-j + k + 1)) >= 2^(-j + k)
+            u(i, j) = 1;
+        else
+            u(i, j) = 0;
+        end
+    end
+end
+
+% Display G Matrix
+disp('G =');
+disp(G);
+
+% Generate Codewords
+c = rem(u * G, 2);
+disp('Codewords (c) =');
+disp(c);
+
+% Find minimum distance
+w_min = min(sum(c(2:end, :), 2));
+disp('Minimum distance (w_min) =');
+disp(w_min);
+
+% Received Codeword (example)
+r = [0 0 0 1 0 0 0];
+disp('Received word (r) =');
+disp(r);
+
+% Find Syndrome
+ht = H';
+s = rem(r * ht, 2);
+disp('Syndrome (s) =');
+disp(s);
+
+% Check for error position
+for i = 1:size(ht,1)
+    if isequal(ht(i, :), s)
+        disp('Error detected in bit:');
+        disp(i);
+        r(i) = 1 - r(i);
+        break;
+    end
+end
+
+disp('Corrected Codeword:');
+disp(r);
 
