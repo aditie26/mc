@@ -1,0 +1,337 @@
+DC5
+ 
+M = 256;
+x = (0:M-1);
+y = qammod(x, M);
+scatterplot(y)
+
+DC5.2
+
+M = 16;
+x = (0:M-1) ;
+y = qammod(x,M);
+scatterplot(y)
+
+DC5.3
+M=4;
+data = randi([0 M-1],1000,1);
+txSig = pskmod(data,M,pi/M);
+rxSig = awgn(txSig,20);
+scatterplot(rxSig)
+
+DC5.4
+M1=16;
+data = randi([0 M1-1],1000,1);
+txSig1 = pskmod(data,M1,pi/M1);
+rxSig1 = awgn(txSig1,20);
+scatterplot(rxSig1)
+
+DC 6
+clc;
+clear;
+close all;
+Eb=5*10^-8;
+No=2*10^-9;
+N = 100;
+M = 4;
+Pe=0.5*erfc(sqrt(Eb/No))
+pe=erfc(sqrt(N*Eb/No)*(sin(3.14/M)^2))
+pe = 2*erfc(sqrt(0.4*Eb/No))
+pe=(M^-1/2)*erfc(sqrt(N*Eb/2*No))
+
+DC 7
+%% PRACTICAL 7:
+clc;
+clear;
+close all;
+
+%% Parameters
+no_of_data_bits = 64;         % Number of bits
+M = 4;                        % QPSK modulation (M=4)
+k = log2(M);                  % Bits per symbol
+block_size = 16;              % IFFT size
+cp_len = floor(0.1 * block_size); % Cyclic prefix length
+n_subcarriers = 4;            % Number of subcarriers
+ifft_len = block_size;
+
+%% Transmitter
+
+% Generate random data
+data = randi([0 M-1], 1, no_of_data_bits);
+figure, stem(data); grid on;
+xlabel('Index'); ylabel('Amplitude'); title('Original Data');
+
+% QPSK Modulation
+mod_data = pskmod(data, M);
+figure, stem(real(mod_data)); grid on;
+xlabel('Index'); ylabel('Amplitude'); title('QPSK Modulated Data');
+
+% Serial to Parallel: Group into 4 subcarriers
+symbols_per_carrier = no_of_data_bits / n_subcarriers;
+S2P_data = reshape(mod_data, symbols_per_carrier, n_subcarriers);
+
+% IFFT for each OFDM symbol
+ifft_data = ifft(S2P_data, ifft_len);
+
+% Add cyclic prefix
+cp = ifft_data(end - cp_len + 1:end, :);
+ofdm_with_cp = [cp; ifft_data];
+
+% Serialize for transmission
+ofdm_tx = reshape(ofdm_with_cp, 1, []);
+
+figure, plot(real(ofdm_tx)); grid on;
+title('Transmitted OFDM Signal');
+xlabel('Time'); ylabel('Amplitude');
+
+%% Channel
+
+% Simple multipath fading channel (2-tap)
+channel = (randn(1,2) + 1i*randn(1,2)) / sqrt(2);
+rx_channel = filter(channel, 1, ofdm_tx);
+
+% Add AWGN
+SNR_dB = 20;  % Example SNR in dB
+rx_signal = awgn(rx_channel, SNR_dB, 'measured');
+
+figure, plot(real(rx_signal)); grid on;
+title('Received Signal After Channel and Noise');
+
+%% Receiver
+
+% Parallel conversion
+ofdm_rx_matrix = reshape(rx_signal, ifft_len + cp_len, n_subcarriers);
+
+% Remove cyclic prefix
+ofdm_rx_no_cp = ofdm_rx_matrix(cp_len+1:end, :);
+
+% FFT to return to frequency domain
+rx_fft = fft(ofdm_rx_no_cp, ifft_len);
+
+% Channel Frequency Response (for equalization)
+H = fft(channel, ifft_len);
+H_matrix = repmat(H.', 1, n_subcarriers);  % Match dimensions
+
+% Equalize (Zero Forcing)
+rx_equalized = rx_fft ./ H_matrix;
+
+% Parallel to Serial
+rx_serial = reshape(rx_equalized, 1, []);
+
+% QPSK Demodulation
+rx_demod = pskdemod(rx_serial, M);
+
+%% Plot Original vs Received
+figure;
+stem(data, 'b'); hold on;
+stem(rx_demod, 'r'); grid on;
+xlabel('Symbol Index'); ylabel('Symbol Value');
+legend('Original', 'Received');
+title('Transmitted vs Received Symbols');
+
+%% BER Calculation
+num_errors = sum(data ~= rx_demod);
+BER = num_errors / no_of_data_bits;
+fprintf('Bit Error Rate (BER): %.4f\n', BER);
+
+DC 8
+clc;
+clear all;
+close all;
+
+i = input('Enter no. of elements: ');
+q = input('Enter joint probabilities matrix: ');
+
+% Probability P(X)
+w = 0;
+for n = 1:i
+    for m = 1:i
+        w = w + q(n, m);
+    end
+    p(n) = w;
+    w = 0;
+end
+
+disp('P(X): ');
+disp(p);
+
+% Entropy H(X)
+k = 0;
+for n = 1:i
+    H1 = k + (p(n) * log2(1 / p(n)));
+    k = H1;
+end
+disp('H(X): ');
+disp(H1);
+
+% Conditional probability matrix
+for n = 1:i
+    for m = 1:i
+        a(n, m) = q(n, m) / p(n);
+    end
+end
+
+disp('P(Y/X): ');
+disp(a);
+
+% Entropy H(Y/X)
+d = 0;
+for n = 1:i
+    for m = 1:i
+        if (a(n, m) ~= 0)
+            H1 = d + (q(n, m) * log2(1 / a(n, m)));
+            d = H1;
+        end
+    end
+end
+
+disp('H(Y/X): ');
+disp(H1);
+
+% Probability P(Y)
+w = 0;
+for n = 1:i
+    for m = 1:i
+        w = w + q(m, n);
+    end
+    s(n) = w;
+    w = 0;
+end
+
+disp('P(Y): ');
+disp(s);
+
+% Entropy H(Y)
+k = 0;
+for n = 1:i
+    H2 = k + (s(n) * log2(1 / s(n)));
+    k = H2;
+end
+
+disp('H(Y): ');
+disp(H2);
+
+% Mutual Information (MI)
+m = H2 - H1;
+disp('MI = ');
+disp(m);
+IN THE OUTPUT:
+(ENTER NO.OF ELEMENTS=3
+ENTER MATRIX=[0.27 0.03 0;0 0.2 0.05;0 0.135 0.315] )
+
+DC 9
+%% DC EXPERIMENT NO. 9
+
+clc; clear; close all;
+
+% Define symbols and their probabilities
+symbols = 1:5;                          % Symbols
+p = [0.4 0.15 0.15 0.15 0.15];          % Probabilities (must sum to 1)
+
+% Generate Huffman dictionary
+[dict, avglen] = huffmandict(symbols, p);
+
+% Calculate average information (Entropy H(X))
+H = sum(p .* log2(1 ./ p));
+
+% Calculate efficiency
+Efficiency = (H / avglen) * 100;
+
+% Generate random signal of 100 symbols using given distribution
+sig = randsrc(1, 100, [symbols; p]);
+
+% Encode and Decode
+hcode = huffmanenco(sig, dict);
+dcode = huffmandeco(hcode, dict);
+
+% Measure code length
+code_length = length(hcode);
+
+% --------------- Display Results ----------------
+disp('--- Huffman Coding Results ---');
+disp('Huffman Dictionary (Symbol -> Code):');
+disp(dict);
+
+fprintf('Entropy (H): %.4f bits/symbol\n', H);
+fprintf('Average Code Length: %.4f bits/symbol\n', avglen);
+fprintf('Efficiency: %.2f %%\n', Efficiency);
+fprintf('Total Encoded Length: %d bits\n', code_length);
+
+% Check decoding correctness
+if isequal(sig, dcode)
+    disp('Decoding successful: Original signal and decoded signal match ✓');
+else
+    disp('Decoding error ✗');
+end
+
+DC 10
+clc;
+clear;
+
+% Given H Matrix (3x7 for (7,4) Hamming Code)
+H = [1 1 0 1 0 0 0;
+     1 0 1 0 1 0 0;
+     0 1 1 0 0 1 0];
+
+k = 4;
+n = 7;
+
+% Generating G Matrix
+P = H';      % Transpose of H → 7x3
+L = P;
+L(5:7, :) = [];  % Remove last 3 rows (now L is 4x3)
+I = eye(k);      % Identity matrix (4x4)
+G = [I L];       % Generator matrix (4x7)
+
+% Generate all 2^k data words
+no = 2^k;
+u = zeros(no, k);
+
+for i = 1:no
+    for j = k:-1:1
+        if rem(i - 1, 2^(-j + k + 1)) >= 2^(-j + k)
+            u(i, j) = 1;
+        else
+            u(i, j) = 0;
+        end
+    end
+end
+
+% Display G Matrix
+disp('G =');
+disp(G);
+
+% Generate Codewords
+c = rem(u * G, 2);
+disp('Codewords (c) =');
+disp(c);
+
+% Find minimum distance
+w_min = min(sum(c(2:end, :), 2));
+disp('Minimum distance (w_min) =');
+disp(w_min);
+
+% Received Codeword (example)
+r = [0 0 0 1 0 0 0];
+disp('Received word (r) =');
+disp(r);
+
+% Find Syndrome
+ht = H';
+s = rem(r * ht, 2);
+disp('Syndrome (s) =');
+disp(s);
+
+% Check for error position
+for i = 1:size(ht,1)
+    if isequal(ht(i, :), s)
+        disp('Error detected in bit:');
+        disp(i);
+        r(i) = 1 - r(i);
+        break;
+    end
+end
+
+disp('Corrected Codeword:');
+disp(r);
+
